@@ -1,0 +1,17 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Inter", sans-serif;
+  background: radial-gradient(circle at top, #0b1120 0%, #020617 60%, #020617);
+  color: #e5e7eb;
+}
+
+#root {
+  min-height: 100vh;
+}
+

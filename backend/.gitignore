@@ -1,0 +1,12 @@
+.venv/
+.env
+.env.example
+.env.local
+.env.staging
+__pycache__/
+*.pyc
+node_modules/
+
+storage/
+logs/
+*.log
