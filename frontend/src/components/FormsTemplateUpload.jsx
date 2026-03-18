@@ -199,7 +199,7 @@ export default function FormsTemplateUpload() {
                         <input
                           value={f.key}
                           onChange={(e) => updateField(f.id, { key: e.target.value })}
-                          placeholder="e.g., medicNumber"
+                          placeholder="e.g., phoneNumber"
                           style={{ width: "100%" }}
                         />
                         <small style={{ opacity: 0.7 }}>

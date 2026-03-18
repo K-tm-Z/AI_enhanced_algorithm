@@ -1,66 +1,73 @@
-// src/lib/api.ts
-import { getToken, clearToken } from "./auth";
-
-export async function apiFetch(input: RequestInfo, init: RequestInit = {}) {
-  const token = getToken();
-  const headers = new Headers(init.headers || {});
-  if (token) headers.set("Authorization", `Bearer ${token}`);
-
-  const res = await fetch(input, { ...init, headers });
-
-  if (res.status === 401) {
-    clearToken();
-  }
-
-  return res;
+export function getStoredToken() {
+  return (
+    localStorage.getItem("accessToken") ||
+    localStorage.getItem("token") ||
+    localStorage.getItem("authToken") ||
+    ""
+  );
 }
 
-export async function apiJson(input: RequestInfo, init: RequestInit = {}) {
-  const res = await apiFetch(input, {
+export async function authFetch(input: RequestInfo | URL, init: RequestInit = {}) {
+  const token = getStoredToken();
+  const headers = new Headers(init.headers || {});
+
+  if (token) {
+    headers.set("Authorization", `Bearer ${token}`);
+  }
+
+  const response = await fetch(input, {
     ...init,
-    headers: {
-      ...(init.headers || {}),
-      "Content-Type": "application/json",
-    },
+    headers,
   });
 
-  const text = await res.text();
-  if (!res.ok) {
-    let message = text || `Request failed with ${res.status}`;
-    try {
-      const data = JSON.parse(text);
-      message = data?.detail || message;
-    } catch {
-      // ignore
-    }
-    throw new Error(message);
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(text || `Request failed with status ${response.status}`);
   }
 
-  return text ? JSON.parse(text) : null;
+  return response;
 }
 
-export async function apiFormData(
-  input: RequestInfo,
-  options: { formData: FormData; init?: RequestInit } = { formData: new FormData() }
-) {
-  const { formData, init } = options;
-  const res = await apiFetch(input, {
-    ...(init || {}),
-    method: init?.method || "POST",
+export async function getJson<T>(url: string): Promise<T> {
+  const response = await authFetch(url);
+  return response.json();
+}
+
+export async function sendJson<T>(url: string, method: string, body?: unknown): Promise<T> {
+  const response = await authFetch(url, {
+    method,
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+
+  return response.json();
+}
+
+export async function sendDelete<T = { ok?: boolean }>(url: string): Promise<T> {
+  const response = await authFetch(url, { method: "DELETE" });
+  const text = await response.text();
+  if (!text.trim()) return {} as T;
+  return JSON.parse(text) as T;
+}
+
+export async function sendFormData<T>(url: string, method: string, formData: FormData): Promise<T> {
+  const response = await authFetch(url, {
+    method,
     body: formData,
   });
 
-  const text = await res.text();
-  if (!res.ok) {
-    let message = text || `Request failed with ${res.status}`;
-    try {
-      const data = JSON.parse(text);
-      message = data?.detail || message;
-    } catch {
-      // ignore
-    }
-    throw new Error(message);
-  }
+  return response.json();
+}
 
-  return text ? JSON.parse(text) : null;
+/** Alias for older components (FormsBrowser, etc.) */
+export const apiJson = getJson;
+
+/** Alias for FormsTemplateUpload.jsx */
+export async function apiFormData<T = unknown>(
+  url: string,
+  opts: { formData: FormData },
+): Promise<T> {
+  return sendFormData<T>(url, "POST", opts.formData);
 }

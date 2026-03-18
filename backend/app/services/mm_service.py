@@ -1,7 +1,10 @@
 import base64
 import json
+import logging
 import re
 from typing import Any, Dict, List, Optional
+
+logger = logging.getLogger(__name__)
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -19,6 +22,57 @@ def _strip_code_fences(s: str) -> str:
     s = re.sub(r"^```(?:json)?\s*", "", s, flags=re.IGNORECASE)
     s = re.sub(r"\s*```$", "", s)
     return s.strip()
+
+
+def _parse_json_object_from_text(text: str) -> Optional[Dict[str, Any]]:
+    """
+    Parse a JSON object from model output: full string, fenced block, or first {...} span.
+    """
+    if not text or not text.strip():
+        return None
+    cleaned = _strip_code_fences(text)
+    for candidate in (cleaned, text.strip()):
+        try:
+            val = json.loads(candidate)
+            if isinstance(val, dict):
+                return val
+        except json.JSONDecodeError:
+            pass
+    start = cleaned.find("{")
+    if start == -1:
+        return None
+    depth = 0
+    in_str = False
+    esc = False
+    quote = ""
+    for i in range(start, len(cleaned)):
+        c = cleaned[i]
+        if in_str:
+            if esc:
+                esc = False
+            elif c == "\\":
+                esc = True
+            elif c == quote:
+                in_str = False
+            continue
+        if c in ('"', "'"):
+            in_str = True
+            quote = c
+            continue
+        if c == "{":
+            depth += 1
+        elif c == "}":
+            depth -= 1
+            if depth == 0:
+                chunk = cleaned[start : i + 1]
+                try:
+                    val = json.loads(chunk)
+                    if isinstance(val, dict):
+                        return val
+                except json.JSONDecodeError:
+                    pass
+                break
+    return None
 
 
 async def extract_payload_multimodal(
@@ -40,9 +94,10 @@ async def extract_payload_multimodal(
 
     # System + user prompt pattern: schema-bound extraction
     system = (
-        "You are a data extraction engine. "
+        "You are a data extraction engine for structured business/medical forms. "
+        "The user provides dictation and optional form images; extracting field values is safe and expected. "
         "You must output ONLY valid JSON that conforms exactly to the provided JSON Schema. "
-        "No markdown, no code fences, no commentary."
+        "No markdown, no code fences, no commentary, no refusals—use empty strings for unknown fields."
     )
 
     user_text = {
@@ -90,13 +145,20 @@ async def extract_payload_multimodal(
         r.raise_for_status()
         data = r.json()
 
-    text = data["choices"][0]["message"]["content"]
-    text = _strip_code_fences(text)
+    raw = data["choices"][0]["message"]["content"] or ""
+    text = raw if isinstance(raw, str) else str(raw)
 
-    try:
-        return json.loads(text)
-    except Exception as e:
-        raise ValueError(f"Model did not return valid JSON. Raw: {text[:500]}") from e
+    parsed = _parse_json_object_from_text(text)
+    if parsed is not None:
+        return parsed
+
+    preview = (text or "").strip()[:500] or "(empty)"
+    logger.warning(
+        "Multimodal model returned no parseable JSON (refusal or invalid). Raw preview: %s",
+        preview,
+    )
+    # Let draft creation continue; validation will surface missing required fields.
+    return {}
 
 
 async def bytes_to_data_url(image_bytes: bytes, mime: str) -> Dict[str, str]:

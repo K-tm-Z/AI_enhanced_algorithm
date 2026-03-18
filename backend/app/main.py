@@ -1,9 +1,15 @@
 from fastapi import FastAPI
+from fastapi.encoders import ENCODERS_BY_TYPE
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from bson import ObjectId
 import os
 
 from .config import settings
+
+# MongoDB insert_one mutates docs with _id: ObjectId; FastAPI cannot JSON-encode it by default.
+ENCODERS_BY_TYPE[ObjectId] = str
+
 from .db import close_db, get_db, init_db
 from .migrations.forms import ensure_form_collections
 from .routers.auth import router as auth_router
