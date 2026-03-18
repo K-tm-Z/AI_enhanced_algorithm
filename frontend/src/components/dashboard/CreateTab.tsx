@@ -1,6 +1,7 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import type { BackendTemplateDetail, BackendTemplateSummary } from "../../types/forms";
 import { prettyLabel } from "../../utils/formHelpers";
+import { toStorageUrl } from "../../utils/storageUrl";
 
 type CreateTabProps = {
   templates: BackendTemplateSummary[];
@@ -10,6 +11,8 @@ type CreateTabProps = {
   onGoToTemplates: () => void;
   onCreateDraft: () => void;
   onResetStatus: () => void;
+  onRemoveTemplate: (formType: string) => void;
+  removingFormType: string | null;
 };
 
 const CreateTab: React.FC<CreateTabProps> = ({
@@ -20,7 +23,17 @@ const CreateTab: React.FC<CreateTabProps> = ({
   onGoToTemplates,
   onCreateDraft,
   onResetStatus,
+  onRemoveTemplate,
+  removingFormType,
 }) => {
+  const previewUrls = (selectedTemplateDetail?.templateImageUrls ?? [])
+    .map(toStorageUrl)
+    .filter(Boolean);
+  const [previewIndex, setPreviewIndex] = useState(0);
+  useEffect(() => {
+    setPreviewIndex(0);
+  }, [selectedTemplate?.formType, previewUrls.length]);
+
   return (
     <div className="tab-section fade-slide-in">
       <div className="section-heading-row">
@@ -34,7 +47,7 @@ const CreateTab: React.FC<CreateTabProps> = ({
         <div className="empty-state">
           <h3>No templates available</h3>
           <p>Upload a template first to enable draft creation.</p>
-          <button className="modal-submit" onClick={onGoToTemplates}>
+          <button type="button" className="modal-submit" onClick={onGoToTemplates}>
             Go to Templates
           </button>
         </div>
@@ -61,11 +74,17 @@ const CreateTab: React.FC<CreateTabProps> = ({
                   </div>
                   <span className="widget-tag">v{template.version}</span>
                 </div>
-                <div className="template-card-meta">
-                  {(template.templateImageUrls?.length || 0) > 0
-                    ? `${template.templateImageUrls?.length} reference image(s)`
-                    : "Schema-driven template"}
-                </div>
+                {template.templateImageUrls?.[0] ? (
+                  <div className="template-card-thumb-wrap">
+                    <img
+                      className="template-card-thumb"
+                      src={toStorageUrl(template.templateImageUrls[0])}
+                      alt=""
+                    />
+                  </div>
+                ) : (
+                  <div className="template-card-meta">No preview image</div>
+                )}
               </button>
             );
           })}
@@ -73,7 +92,7 @@ const CreateTab: React.FC<CreateTabProps> = ({
       )}
 
       {selectedTemplate && (
-        <div className="selection-panel">
+        <div className="selection-panel selection-panel-actions">
           <div>
             <div className="selection-title">
               {selectedTemplate.displayName || prettyLabel(selectedTemplate.formType)}
@@ -82,22 +101,52 @@ const CreateTab: React.FC<CreateTabProps> = ({
               Version {selectedTemplate.version} · {selectedTemplate.formType}
             </div>
           </div>
-          <button className="modal-submit" onClick={onCreateDraft}>
-            Create Draft
-          </button>
+          <div className="selection-panel-buttons">
+            <button type="button" className="modal-submit" onClick={onCreateDraft}>
+              Create Draft
+            </button>
+            <button
+              type="button"
+              className="button-danger-outline"
+              disabled={removingFormType === selectedTemplate.formType}
+              onClick={() => onRemoveTemplate(selectedTemplate.formType)}
+            >
+              {removingFormType === selectedTemplate.formType ? "Removing…" : "Remove template"}
+            </button>
+          </div>
         </div>
       )}
 
-      {selectedTemplateDetail?.jsonSchema?.properties && (
-        <div className="schema-preview">
-          <h3>Schema Preview</h3>
-          <div className="field-chip-list">
-            {Object.entries(selectedTemplateDetail.jsonSchema.properties).map(([key, value]) => (
-              <span key={key} className="field-chip">
-                {value.title || prettyLabel(key)}
-              </span>
-            ))}
-          </div>
+      {selectedTemplate && (
+        <div className="form-preview">
+          <h3>Form preview</h3>
+          {previewUrls.length > 0 ? (
+            <>
+              <div className="form-preview-main">
+                <img
+                  src={previewUrls[Math.min(previewIndex, previewUrls.length - 1)]}
+                  alt={`${selectedTemplate.displayName || selectedTemplate.formType} blank form`}
+                  className="form-preview-image"
+                />
+              </div>
+              {previewUrls.length > 1 && (
+                <div className="form-preview-thumbs">
+                  {previewUrls.map((url, i) => (
+                    <button
+                      key={url}
+                      type="button"
+                      className={`form-preview-thumb${i === previewIndex ? " form-preview-thumb-active" : ""}`}
+                      onClick={() => setPreviewIndex(i)}
+                    >
+                      <img src={url} alt="" />
+                    </button>
+                  ))}
+                </div>
+              )}
+            </>
+          ) : (
+            <p className="form-preview-empty">No reference images for this template.</p>
+          )}
         </div>
       )}
     </div>

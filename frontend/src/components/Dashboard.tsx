@@ -1,15 +1,16 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { clearToken } from "../lib/auth";
-import { getJson } from "../lib/api";
+import { authFetch, getJson } from "../lib/api";
 import type { BackendDraft, BackendTemplateDetail, BackendTemplateSummary, TabId } from "../types/forms";
 import { flattenValidation } from "../utils/formHelpers";
 import CreateTab from "./dashboard/CreateTab";
 import TemplatesTab from "./dashboard/TemplatesTab";
 import ReviewTab from "./dashboard/ReviewTab";
+import BatchTab from "./dashboard/BatchTab";
 import Sidebar from "./dashboard/Sidebar";
 import TabNav from "./common/TabNav";
-import TemplateBuilderModal from "./modals/TemplateBuilderModal";
+import TemplateWizardModal from "./modals/TemplateWizardModal";
 import CreateDraftModal from "./modals/CreateDraftModal";
 import DraftReviewModal from "./modals/DraftReviewModal";
 
@@ -27,6 +28,7 @@ const Dashboard: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
   const [showCreateDraftModal, setShowCreateDraftModal] = useState(false);
   const [showReviewModal, setShowReviewModal] = useState(false);
   const [lastRunId, setLastRunId] = useState<string | null>(null);
+  const [removingFormType, setRemovingFormType] = useState<string | null>(null);
 
   const loadTemplates = async () => {
     setBusy(true);
@@ -35,10 +37,11 @@ const Dashboard: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
     try {
       const result = await getJson<BackendTemplateSummary[]>("/api/forms");
       setTemplates(result);
-
-      if (!selectedTemplate && result.length > 0) {
-        setSelectedTemplate(result[0]);
-      }
+      setSelectedTemplate((prev) => {
+        if (!prev) return result[0] ?? null;
+        const stillThere = result.some((t) => t.formType === prev.formType);
+        return stillThere ? prev : result[0] ?? null;
+      });
     } catch (err: unknown) {
       setPageError(err instanceof Error ? err.message : "Failed to load templates");
     } finally {
@@ -82,6 +85,26 @@ const Dashboard: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
     void syncDraftTemplate();
   }, [currentDraft?.formType, selectedTemplateDetail?.formType]);
 
+  const handleRemoveTemplate = async (formType: string) => {
+    const label = templates.find((t) => t.formType === formType)?.displayName || formType;
+    if (!window.confirm(`Remove template "${label}" from the workspace? You can upload it again later if needed.`)) {
+      return;
+    }
+    setRemovingFormType(formType);
+    setPageError(null);
+    try {
+      await authFetch(`/api/forms/templates/${encodeURIComponent(formType)}`, {
+        method: "DELETE",
+      });
+      setStatusMessage(`Template removed: ${label}.`);
+      await loadTemplates();
+    } catch (err: unknown) {
+      setPageError(err instanceof Error ? err.message : "Failed to remove template");
+    } finally {
+      setRemovingFormType(null);
+    }
+  };
+
   const handleSignOut = () => {
     clearToken?.();
     onLogout();
@@ -111,10 +134,21 @@ const Dashboard: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
             onGoToTemplates={() => setActiveTab("templates")}
             onCreateDraft={() => setShowCreateDraftModal(true)}
             onResetStatus={() => setStatusMessage(null)}
+            onRemoveTemplate={handleRemoveTemplate}
+            removingFormType={removingFormType}
           />
         );
       case "templates":
-        return <TemplatesTab templates={templates} onUploadTemplate={() => setShowTemplateModal(true)} />;
+        return (
+          <TemplatesTab
+            templates={templates}
+            onUploadTemplate={() => setShowTemplateModal(true)}
+            onRemoveTemplate={handleRemoveTemplate}
+            removingFormType={removingFormType}
+          />
+        );
+      case "batch":
+        return <BatchTab />;
       case "review":
         return (
           <ReviewTab
@@ -159,11 +193,11 @@ const Dashboard: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
         pageError={pageError}
       />
 
-      <TemplateBuilderModal
+      <TemplateWizardModal
         isOpen={showTemplateModal}
         onClose={() => setShowTemplateModal(false)}
         onUploaded={() => {
-          setStatusMessage("Template uploaded successfully.");
+          setStatusMessage("Template saved successfully.");
           void loadTemplates();
         }}
       />

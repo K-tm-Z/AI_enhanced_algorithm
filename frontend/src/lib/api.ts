@@ -45,6 +45,13 @@ export async function sendJson<T>(url: string, method: string, body?: unknown): 
   return response.json();
 }
 
+export async function sendDelete<T = { ok?: boolean }>(url: string): Promise<T> {
+  const response = await authFetch(url, { method: "DELETE" });
+  const text = await response.text();
+  if (!text.trim()) return {} as T;
+  return JSON.parse(text) as T;
+}
+
 export async function sendFormData<T>(url: string, method: string, formData: FormData): Promise<T> {
   const response = await authFetch(url, {
     method,
@@ -52,4 +59,15 @@ export async function sendFormData<T>(url: string, method: string, formData: For
   });
 
   return response.json();
+}
+
+/** Alias for older components (FormsBrowser, etc.) */
+export const apiJson = getJson;
+
+/** Alias for FormsTemplateUpload.jsx */
+export async function apiFormData<T = unknown>(
+  url: string,
+  opts: { formData: FormData },
+): Promise<T> {
+  return sendFormData<T>(url, "POST", opts.formData);
 }

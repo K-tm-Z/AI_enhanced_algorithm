@@ -1,6 +1,7 @@
 import React from "react";
 import type { BackendTemplateDetail, BackendTemplateSummary } from "../../types/forms";
 import { prettyLabel } from "../../utils/formHelpers";
+import { toStorageUrl } from "../../utils/storageUrl";
 
 type SidebarProps = {
   stats: { label: string; value: string }[];
@@ -48,12 +49,13 @@ const Sidebar: React.FC<SidebarProps> = ({
             ? `${selectedTemplate.displayName || prettyLabel(selectedTemplate.formType)} · version ${selectedTemplate.version}`
             : "No template selected."}
         </p>
-        {selectedTemplateDetail?.promptSpec?.rules?.length ? (
-          <ul className="widget-list">
-            {selectedTemplateDetail.promptSpec.rules.slice(0, 3).map((rule) => (
-              <li key={rule}>{rule}</li>
-            ))}
-          </ul>
+        {selectedTemplateDetail?.templateImageUrls?.[0] ? (
+          <div className="sidebar-template-preview">
+            <img
+              src={toStorageUrl(selectedTemplateDetail.templateImageUrls[0])}
+              alt="Selected form template"
+            />
+          </div>
         ) : null}
       </div>
 

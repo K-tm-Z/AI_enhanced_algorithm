@@ -1,4 +1,4 @@
-export type TabId = "create" | "templates" | "review";
+export type TabId = "create" | "batch" | "review" | "templates";
 
 export type JsonSchemaField = {
   type?: "string" | "number" | "integer" | "boolean" | "date";
